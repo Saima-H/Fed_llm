@@ -1,12 +1,16 @@
 # Fed-LLM CPS Incident Commander
 
-**Fed-LLM CPS Incident Commander** is an Agentic RAG-style incident-response copilot for Cyber-Physical Systems (CPS).
+**Fed-LLM CPS Incident Commander** is an end-to-end Cyber-Physical System (CPS) project that combines:
 
-It is designed to sit on top of a federated fault/cyber-attack detector such as TA-FedX-CPS. The detector produces model outputs such as prediction, confidence, Adaptive CDAW score, client trust, and SHAP features. This copilot retrieves relevant maintenance/security runbooks and drafts an incident response plan.
+1. **TA-FedX-CPS detector**: trust-aware federated learning for fault/cyber-attack detection.
+2. **Fed-LLM response agent**: Agentic RAG-style runbook retrieval and incident response generation.
+
+The detector produces outputs such as prediction, confidence, Adaptive CDAW score, client trust, and SHAP features. The response agent retrieves relevant maintenance/security runbooks and drafts an incident response plan.
 
 ## What It Does
 
 - Reads CPS incident context from JSON
+- Runs a complete TA-FedX-CPS detector pipeline
 - Uses model outputs such as:
   - prediction
   - confidence
@@ -18,11 +22,9 @@ It is designed to sit on top of a federated fault/cyber-attack detector such as 
 - Recommends whether maintenance, cybersecurity, or both teams should respond
 - Drafts a stakeholder update with runbook citations
 
-## Why This Is Separate From TA-FedX-CPS
+## End-to-End Architecture
 
-TA-FedX-CPS is the detection engine.
-
-Fed-LLM is the response and reasoning layer.
+TA-FedX-CPS is the detection engine. Fed-LLM is the response and reasoning layer.
 
 ```text
 CPS sensor/network data
@@ -43,7 +45,9 @@ This keeps the machine learning project clean while showing a modern LLM/RAG inc
 ```text
 .
 |-- src/
-|   `-- fed_llm_cps_agent.py
+|   |-- ta_fedx_cps_detector.py
+|   |-- fed_llm_cps_agent.py
+|   `-- run_full_pipeline.py
 |-- runbooks/
 |   |-- cyber_attack_playbook.md
 |   |-- machinery_fault_playbook.md
@@ -56,13 +60,37 @@ This keeps the machine learning project clean while showing a modern LLM/RAG inc
 `-- .gitignore
 ```
 
-## Run Locally
+## Run the Agent Demo Only
 
 ```bash
 python src/fed_llm_cps_agent.py --event examples/sample_cps_event.json --out incident_report.md
 ```
 
 The script works without an LLM API key. It uses deterministic retrieval and report generation so the demo is reproducible.
+
+## Run the Full Detector + Agent Pipeline
+
+Place the UNSW-NB15 files in the project root if you want real results:
+
+```text
+UNSW_NB15_training-set.csv
+UNSW_NB15_testing-set.csv
+```
+
+Then run:
+
+```bash
+python src/run_full_pipeline.py
+```
+
+This will:
+
+1. Train/evaluate the TA-FedX-CPS detector.
+2. Export `fedx_had_outputs/incident_event_for_agent.json`.
+3. Run the Fed-LLM incident agent.
+4. Generate `fed_llm_incident_report.md`.
+
+If the dataset is missing, the detector runs in synthetic demo mode.
 
 ## Future LLM Upgrade
 
@@ -75,5 +103,4 @@ The current implementation is LLM-ready. A future version can replace the final 
 
 ## Resume Summary
 
-Built Fed-LLM, an Agentic RAG-style CPS incident-response copilot that consumes federated model outputs, Adaptive CDAW anomaly scores, and SHAP explanations to retrieve maintenance/security runbooks, classify severity, recommend remediation, and draft stakeholder updates.
-
+Built Fed-LLM, an end-to-end CPS incident diagnosis system combining trust-aware federated fault/cyber-attack detection with an Agentic RAG-style response copilot that retrieves maintenance/security runbooks, classifies severity, recommends remediation, and drafts stakeholder updates.

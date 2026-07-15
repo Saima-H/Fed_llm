@@ -5,4 +5,7 @@ __pycache__/
 venv/
 .ipynb_checkpoints/
 incident_report.md
-
+fed_llm_incident_report.md
+fedx_had_outputs/
+UNSW_NB15_training-set.csv
+UNSW_NB15_testing-set.csv

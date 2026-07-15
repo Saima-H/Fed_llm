@@ -1,2 +1,7 @@
+pandas
+numpy
+torch
 scikit-learn
-
+matplotlib
+seaborn
+shap
