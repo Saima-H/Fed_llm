@@ -420,15 +420,22 @@ def classifier_validation_metrics(model, x_val, y_val):
         x_eval = x_val
         y_eval = y_val
 
-    scores = classifier_scores(model, x_eval)
+    scores = np.nan_to_num(classifier_scores(model, x_eval), nan=0.5, posinf=1.0, neginf=0.0)
+    if len(np.unique(y_eval)) < 2:
+        return {"auc": 0.5, "f1": 0.0, "performance": 0.5}
+
     try:
         auc = roc_auc_score(y_eval, scores)
     except ValueError:
+        auc = 0.5
+    if not np.isfinite(auc):
         auc = 0.5
 
     tau = best_threshold_from_validation(y_eval, scores)
     preds = (scores >= tau).astype(int)
     f1 = f1_score(y_eval, preds, zero_division=0)
+    if not np.isfinite(f1):
+        f1 = 0.0
     performance = 0.70 * auc + 0.30 * f1
     return {
         "auc": float(auc),
@@ -448,22 +455,25 @@ def state_update_distance(local_state, global_state):
 
 
 def compute_trust_scores(performance_metrics, update_distances):
-    distances = np.asarray(update_distances, dtype=np.float32)
+    distances = np.nan_to_num(np.asarray(update_distances, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
     median_distance = float(np.median(distances) + 1e-9)
     trusts = []
     rows = []
 
     for idx, metrics in enumerate(performance_metrics):
+        perf = float(np.nan_to_num(metrics["performance"], nan=0.5, posinf=1.0, neginf=0.05))
+        auc = float(np.nan_to_num(metrics["auc"], nan=0.5, posinf=1.0, neginf=0.0))
+        f1 = float(np.nan_to_num(metrics["f1"], nan=0.0, posinf=1.0, neginf=0.0))
         distance_ratio = float(distances[idx] / median_distance)
         excess_ratio = max(0.0, distance_ratio - 1.0)
         update_penalty = 1.0 / (1.0 + CFG.trust_update_penalty_strength * excess_ratio)
-        trust = float(np.clip(metrics["performance"] * update_penalty, 0.05, 1.0))
+        trust = float(np.clip(perf * update_penalty, 0.05, 1.0))
         trusts.append(trust)
         rows.append({
             "client": idx + 1,
-            "auc": metrics["auc"],
-            "f1": metrics["f1"],
-            "performance": metrics["performance"],
+            "auc": auc,
+            "f1": f1,
+            "performance": perf,
             "update_distance": float(distances[idx]),
             "distance_ratio": distance_ratio,
             "update_penalty": update_penalty,
@@ -560,7 +570,7 @@ def classifier_scores(model, x):
             batch = batch.to(DEVICE)
             probs = torch.sigmoid(model(batch))
             scores.extend(probs.detach().cpu().numpy())
-    return np.asarray(scores)
+    return np.nan_to_num(np.asarray(scores), nan=0.5, posinf=1.0, neginf=0.0)
 
 
 def normalize_by_reference(train_scores, scores):
@@ -569,9 +579,15 @@ def normalize_by_reference(train_scores, scores):
 
 
 def best_threshold_from_validation(y_val, val_scores):
+    val_scores = np.nan_to_num(np.asarray(val_scores), nan=0.5, posinf=1.0, neginf=0.0)
+    if len(np.unique(y_val)) < 2 or len(np.unique(val_scores)) < 2:
+        return 0.5
     fpr, tpr, thresholds = roc_curve(y_val, val_scores)
     j_scores = tpr - fpr
-    return thresholds[int(np.argmax(j_scores))]
+    if not np.all(np.isfinite(j_scores)):
+        return 0.5
+    tau = thresholds[int(np.argmax(j_scores))]
+    return float(tau) if np.isfinite(tau) else 0.5
 
 
 def evaluate_scores(name, y_val, val_scores, y_test, test_scores):
