@@ -42,6 +42,7 @@ try:
         average_precision_score,
         confusion_matrix,
         f1_score,
+        precision_recall_curve,
         precision_score,
         recall_score,
         roc_auc_score,
@@ -420,7 +421,8 @@ def classifier_validation_metrics(model, x_val, y_val):
         x_eval = x_val
         y_eval = y_val
 
-    scores = np.nan_to_num(classifier_scores(model, x_eval), nan=0.5, posinf=1.0, neginf=0.0)
+    y_eval = np.asarray(y_eval).astype(int).ravel()
+    scores = sanitize_scores(classifier_scores(model, x_eval))
     if len(np.unique(y_eval)) < 2:
         return {"auc": 0.5, "f1": 0.0, "performance": 0.5}
 
@@ -433,7 +435,10 @@ def classifier_validation_metrics(model, x_val, y_val):
 
     tau = best_threshold_from_validation(y_eval, scores)
     preds = (scores >= tau).astype(int)
-    f1 = f1_score(y_eval, preds, zero_division=0)
+    try:
+        f1 = f1_score(y_eval, preds, zero_division=0)
+    except ValueError:
+        f1 = 0.0
     if not np.isfinite(f1):
         f1 = 0.0
     performance = 0.70 * auc + 0.30 * f1
@@ -570,7 +575,14 @@ def classifier_scores(model, x):
             batch = batch.to(DEVICE)
             probs = torch.sigmoid(model(batch))
             scores.extend(probs.detach().cpu().numpy())
-    return np.nan_to_num(np.asarray(scores), nan=0.5, posinf=1.0, neginf=0.0)
+    return sanitize_scores(scores)
+
+
+def sanitize_scores(scores):
+    scores = np.asarray(scores, dtype=np.float64).reshape(-1)
+    if scores.size == 0:
+        return scores
+    return np.nan_to_num(scores, nan=0.5, posinf=1.0, neginf=0.0)
 
 
 def normalize_by_reference(train_scores, scores):
@@ -579,18 +591,28 @@ def normalize_by_reference(train_scores, scores):
 
 
 def best_threshold_from_validation(y_val, val_scores):
-    val_scores = np.nan_to_num(np.asarray(val_scores), nan=0.5, posinf=1.0, neginf=0.0)
+    y_val = np.asarray(y_val).astype(int).ravel()
+    val_scores = sanitize_scores(val_scores)
     if len(np.unique(y_val)) < 2 or len(np.unique(val_scores)) < 2:
         return 0.5
-    fpr, tpr, thresholds = roc_curve(y_val, val_scores)
-    j_scores = tpr - fpr
-    if not np.all(np.isfinite(j_scores)):
+
+    precision, recall, thresholds = precision_recall_curve(y_val, val_scores)
+    if thresholds.size == 0:
         return 0.5
-    tau = thresholds[int(np.argmax(j_scores))]
+
+    f1_scores = 2.0 * precision[:-1] * recall[:-1] / (precision[:-1] + recall[:-1] + 1e-12)
+    finite = np.isfinite(f1_scores) & np.isfinite(thresholds)
+    if not np.any(finite):
+        return 0.5
+    tau = thresholds[finite][int(np.argmax(f1_scores[finite]))]
     return float(tau) if np.isfinite(tau) else 0.5
 
 
 def evaluate_scores(name, y_val, val_scores, y_test, test_scores):
+    y_val = np.asarray(y_val).astype(int).ravel()
+    y_test = np.asarray(y_test).astype(int).ravel()
+    val_scores = sanitize_scores(val_scores)
+    test_scores = sanitize_scores(test_scores)
     tau = best_threshold_from_validation(y_val, val_scores)
     y_pred = (test_scores >= tau).astype(int)
     return {
@@ -780,7 +802,10 @@ def main():
 
     print("[INFO] Validation split preserves row order before windowing; no shuffled fake temporal windows.")
     print(f"[INFO] Windowed train: {x_fit_w.shape}, val: {x_val_w.shape}, test: {x_test_w.shape}")
-    print(f"[INFO] Train attack ratio: {y_fit_w.mean():.3f}, Test attack ratio: {y_test_w.mean():.3f}")
+    print(
+        f"[INFO] Train attack ratio: {y_fit_w.mean():.3f}, "
+        f"Val attack ratio: {y_val_w.mean():.3f}, Test attack ratio: {y_test_w.mean():.3f}"
+    )
 
     clients = split_clients_non_iid(x_fit_w, y_fit_w, group_fit_w, CFG.n_clients)
     for i, (_, cy) in enumerate(clients, start=1):
@@ -893,6 +918,8 @@ def main():
         row, pred = evaluate_scores(name, y_val_w, val_map[name], y_test_w, score_map[name])
         evaluations.append(row)
         predictions[name] = pred
+        val_unique = len(np.unique(sanitize_scores(val_map[name])))
+        print(f"[THRESHOLD] {name}: tau={row['Threshold']:.4f}, val_unique_scores={val_unique}")
 
     results = pd.DataFrame(evaluations)
     metric_cols = ["Accuracy", "Precision", "Recall", "F1", "ROC_AUC", "PR_AUC"]
