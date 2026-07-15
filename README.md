@@ -47,7 +47,8 @@ This keeps the machine learning project clean while showing a modern LLM/RAG inc
 |-- src/
 |   |-- ta_fedx_cps_detector.py
 |   |-- fed_llm_cps_agent.py
-|   `-- run_full_pipeline.py
+|   |-- run_full_pipeline.py
+|   `-- show_figures_colab.py
 |-- runbooks/
 |   |-- cyber_attack_playbook.md
 |   |-- machinery_fault_playbook.md
@@ -91,6 +92,25 @@ This will:
 4. Generate `fed_llm_incident_report.md`.
 
 If the dataset is missing, the detector runs in synthetic demo mode.
+
+## Show Figures in Google Colab
+
+When you run the full pipeline with `!python`, Colab may save figures but show only text like `Figure(550x450)`.
+
+After the pipeline finishes, run this in a normal Colab code cell:
+
+```python
+%run src/show_figures_colab.py
+```
+
+It displays:
+
+- TA-FedX-IDS confusion matrix
+- Adaptive CDAW confusion matrix
+- ROC comparison
+- CDAW score distribution
+- SHAP explanation plot
+- metrics tables
 
 ## Future LLM Upgrade
 
