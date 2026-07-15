@@ -1,0 +1,16 @@
+{
+  "asset": "PLC-7 / Cooling Pump Line",
+  "prediction": "cyber_attack",
+  "confidence": 0.91,
+  "adaptive_cdaw_score": 0.78,
+  "client_trust": 0.42,
+  "top_shap_features": [
+    "ct_dst_src_ltm",
+    "tcprtt",
+    "dload",
+    "service",
+    "spkts"
+  ],
+  "notes": "Spike in network timing and repeated destination-source communication."
+}
+
