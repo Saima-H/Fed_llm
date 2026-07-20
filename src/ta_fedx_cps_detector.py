@@ -49,6 +49,7 @@ try:
         roc_auc_score,
         roc_curve,
     )
+    from sklearn.model_selection import train_test_split
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder
 except ModuleNotFoundError as exc:
@@ -293,6 +294,41 @@ def ordered_train_validation_split(x_df, y, groups, val_fraction):
     group_fit = groups[:split_at]
     group_val = groups[split_at:]
     return x_fit_df, x_val_df, y_fit, y_val, group_fit, group_val
+
+
+def split_window_train_validation(x_w, y_w, group_w, val_fraction):
+    """Split already-built windows into train and validation sets.
+
+    The important detail is that windows are created before any random
+    selection happens. This keeps every window internally contiguous while
+    still giving threshold tuning a validation set with both classes.
+    """
+    indices = np.arange(len(x_w))
+    class_counts = pd.Series(y_w).value_counts()
+    can_stratify = len(class_counts) >= 2 and class_counts.min() >= 2
+
+    if can_stratify:
+        train_idx, val_idx = train_test_split(
+            indices,
+            test_size=val_fraction,
+            random_state=CFG.seed,
+            stratify=y_w,
+        )
+    else:
+        split_at = int(len(x_w) * (1.0 - val_fraction))
+        split_at = max(1, min(split_at, len(x_w) - 1))
+        train_idx, val_idx = indices[:split_at], indices[split_at:]
+
+    train_idx = np.sort(train_idx)
+    val_idx = np.sort(val_idx)
+    return (
+        x_w[train_idx],
+        y_w[train_idx],
+        group_w[train_idx],
+        x_w[val_idx],
+        y_w[val_idx],
+        group_w[val_idx],
+    )
 
 
 def split_clients_non_iid(x, y, groups, n_clients):
@@ -842,23 +878,22 @@ def main(args=None):
 
     x_train_df, x_test_df, y_train_raw, y_test_raw, group_train_raw, group_test_raw, _, _ = clean_columns(train_df, test_df)
 
-    x_fit_df, x_val_df, y_fit_raw, y_val_raw, group_fit_raw, group_val_raw = ordered_train_validation_split(
-        x_train_df,
-        y_train_raw,
-        group_train_raw,
+    x_train, _, x_test, feature_names = preprocess_features(x_train_df, x_train_df, x_test_df)
+
+    x_train_w, y_train_w, group_train_w = create_windows(x_train, y_train_raw, group_train_raw, CFG.window_size)
+    x_test_w, y_test_w, group_test_w = create_windows(x_test, y_test_raw, group_test_raw, CFG.window_size)
+
+    x_fit_w, y_fit_w, group_fit_w, x_val_w, y_val_w, group_val_w = split_window_train_validation(
+        x_train_w,
+        y_train_w,
+        group_train_w,
         CFG.validation_fraction,
     )
-
-    x_fit, x_val, x_test, feature_names = preprocess_features(x_fit_df, x_val_df, x_test_df)
-
-    x_fit_w, y_fit_w, group_fit_w = create_windows(x_fit, y_fit_raw, group_fit_raw, CFG.window_size)
-    x_val_w, y_val_w, group_val_w = create_windows(x_val, y_val_raw, group_val_raw, CFG.window_size)
-    x_test_w, y_test_w, group_test_w = create_windows(x_test, y_test_raw, group_test_raw, CFG.window_size)
 
     x_fit_w, y_fit_w, group_fit_w = limit_samples(x_fit_w, y_fit_w, group_fit_w, CFG.max_train_windows)
     x_test_w, y_test_w, group_test_w = limit_samples(x_test_w, y_test_w, group_test_w, CFG.max_test_windows)
 
-    print("[INFO] Validation split preserves row order before windowing; no shuffled fake temporal windows.")
+    print("[INFO] Windows are created before train/validation selection; no shuffled fake temporal windows.")
     print(f"[INFO] Windowed train: {x_fit_w.shape}, val: {x_val_w.shape}, test: {x_test_w.shape}")
     print(
         f"[INFO] Train attack ratio: {y_fit_w.mean():.3f}, "
