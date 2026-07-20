@@ -16,6 +16,7 @@ import os
 import random
 import warnings
 import json
+import argparse
 from dataclasses import dataclass
 
 import numpy as np
@@ -98,6 +99,52 @@ def set_seed(seed: int) -> None:
 set_seed(CFG.seed)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"[INFO] Running on {DEVICE}")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="TA-FedX-CPS detector with optional poisoned-client stress testing"
+    )
+    poison_group = parser.add_mutually_exclusive_group()
+    poison_group.add_argument(
+        "--poison",
+        action="store_true",
+        help="Enable controlled label poisoning on one federated client.",
+    )
+    poison_group.add_argument(
+        "--no-poison",
+        action="store_true",
+        help="Disable client poisoning and run the clean baseline.",
+    )
+    parser.add_argument(
+        "--poison-client",
+        type=int,
+        default=CFG.poisoned_client_id,
+        help="1-based client id to poison when poisoning is enabled.",
+    )
+    parser.add_argument(
+        "--poison-fraction",
+        type=float,
+        default=CFG.poison_fraction,
+        help="Fraction of the selected client's labels to flip.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=CFG.output_dir,
+        help="Folder where metrics, figures, and exported event JSON are saved.",
+    )
+    return parser.parse_args()
+
+
+def configure_from_args(args):
+    if args.poison:
+        CFG.enable_poisoned_client_stress_test = True
+    if args.no_poison:
+        CFG.enable_poisoned_client_stress_test = False
+    CFG.poisoned_client_id = args.poison_client
+    CFG.poison_fraction = float(np.clip(args.poison_fraction, 0.0, 1.0))
+    CFG.output_dir = args.output_dir
+    os.makedirs(CFG.output_dir, exist_ok=True)
 
 
 def find_file(filename: str):
@@ -777,7 +824,18 @@ def export_incident_event_for_agent(y_test, predictions, trust_scores, cdaw_scor
     print(f"[AGENT] Exported detector event for Fed-LLM agent: {out_path}")
 
 
-def main():
+def main(args=None):
+    if args is None:
+        args = parse_args()
+    configure_from_args(args)
+
+    stress_mode = "ON" if CFG.enable_poisoned_client_stress_test else "OFF"
+    print(
+        f"[EXPERIMENT] Poisoned-client stress test: {stress_mode} "
+        f"(client={CFG.poisoned_client_id}, fraction={CFG.poison_fraction:.2f})"
+    )
+    print(f"[EXPERIMENT] Output directory: {CFG.output_dir}")
+
     train_df, test_df, dataset_name = load_dataset()
     print(f"[INFO] Dataset mode: {dataset_name}")
     print(f"[INFO] Train shape: {train_df.shape}, Test shape: {test_df.shape}")

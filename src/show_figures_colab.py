@@ -9,6 +9,7 @@ Then run this in a normal Colab code cell:
 """
 
 from pathlib import Path
+import argparse
 
 try:
     from IPython.display import Image, Markdown, display
@@ -39,14 +40,14 @@ def show_markdown(text):
         print(text)
 
 
-def show_figures():
-    output_dir = find_output_dir()
+def show_figures(output_dir_name=OUTPUT_DIR_NAME):
+    output_dir = find_output_dir(output_dir_name)
     if output_dir is None:
         raise FileNotFoundError(
-            "fedx_had_outputs folder not found. Run: !python src/run_full_pipeline.py"
+            f"{output_dir_name} folder not found. Run the detector or comparison script first."
         )
 
-    show_markdown("# Fed-LLM / TA-FedX-CPS Figures")
+    show_markdown(f"# Fed-LLM / TA-FedX-CPS Figures\n`{output_dir}`")
     for title, filename in FIGURES:
         path = output_dir / filename
         if path.exists():
@@ -71,19 +72,22 @@ def show_figures():
                 print(path)
 
 
-def find_output_dir():
+def find_output_dir(output_dir_name=OUTPUT_DIR_NAME):
     candidates = [
-        Path.cwd() / OUTPUT_DIR_NAME,
-        Path.cwd().parent / OUTPUT_DIR_NAME,
-        Path.cwd().parent.parent / OUTPUT_DIR_NAME,
+        Path.cwd() / output_dir_name,
+        Path.cwd().parent / output_dir_name,
+        Path.cwd().parent.parent / output_dir_name,
     ]
     for candidate in candidates:
         if candidate.exists():
             return candidate
 
-    matches = list(Path.cwd().glob(f"**/{OUTPUT_DIR_NAME}"))
+    matches = list(Path.cwd().glob(f"**/{output_dir_name}"))
     return matches[0] if matches else None
 
 
 if __name__ == "__main__":
-    show_figures()
+    parser = argparse.ArgumentParser(description="Display TA-FedX-CPS output figures in Colab")
+    parser.add_argument("--output-dir", default=OUTPUT_DIR_NAME)
+    args = parser.parse_args()
+    show_figures(args.output_dir)

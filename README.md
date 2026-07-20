@@ -48,6 +48,7 @@ This keeps the machine learning project clean while showing a modern LLM/RAG inc
 |   |-- ta_fedx_cps_detector.py
 |   |-- fed_llm_cps_agent.py
 |   |-- run_full_pipeline.py
+|   |-- run_poisoning_comparison.py
 |   `-- show_figures_colab.py
 |-- runbooks/
 |   |-- cyber_attack_playbook.md
@@ -92,6 +93,43 @@ This will:
 4. Generate `fed_llm_incident_report.md`.
 
 If the dataset is missing, the detector runs in synthetic demo mode.
+
+## Clean vs Poisoned Dataset Experiment
+
+The project does not permanently modify the UNSW-NB15 CSV files. Instead, it creates a controlled federated-learning stress test:
+
+- **Clean experiment**: all federated clients train using the original labels.
+- **Poisoned-client experiment**: one client has a selected fraction of its local labels flipped during training.
+
+This simulates an unreliable, faulty, or compromised CPS edge node.
+
+Run both experiments:
+
+```bash
+python src/run_poisoning_comparison.py
+```
+
+The script creates:
+
+```text
+fedx_had_outputs_clean/
+fedx_had_outputs_poisoned/
+poisoning_comparison_summary.csv
+```
+
+To display clean figures in Colab:
+
+```python
+%run src/show_figures_colab.py --output-dir fedx_had_outputs_clean
+```
+
+To display poisoned-client figures in Colab:
+
+```python
+%run src/show_figures_colab.py --output-dir fedx_had_outputs_poisoned
+```
+
+Use this experiment to compare whether FedAvg, robust aggregation, and the proposed trust-aware method behave differently when one client is unreliable.
 
 ## Show Figures in Google Colab
 
